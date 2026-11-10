@@ -946,7 +946,7 @@ $('toTitle').onclick=()=>{ $('result').hidden=true; openSelect(curW); };
 // ================= SHARED RANKING (Firebase Firestore) =================
 // collection scores/<anonymous uid> = { name, best:{'w-d':arrivalSec}, stars:{'w-d':n}, updatedAt }
 const FB_CFG=window.YATAP_CONFIG&&window.YATAP_CONFIG.firebase||null;
-let rankErr='';
+let rankErr='', nameOk=false;
 function errText(e){ const c=(e&&e.code)||''; const m=(e&&e.message)||'';
   if(/operation-not-allowed|admin-restricted/.test(c)) return 'Firebase 익명 로그인이 꺼져 있어요. (Authentication → 로그인 방법 → 익명 사용 설정)';
   if(/unauthorized-domain/.test(c)) return '이 주소가 Firebase 승인된 도메인에 없어요.';
@@ -971,7 +971,7 @@ let myName=''; try{ myName=localStorage.getItem('yatap-name')||''; }catch(e){}
       clearTimeout(tm);
       const m={}; snap.forEach(d=>{ const r=d.data()||{}; m[d.id]={best:r.best||{},stars:r.stars||{},name:r.name||''}; }); allScores=m;
       rankState='ready'; renderRank(); updateResRank();
-      if(first){ first=false; backfillLocal(); const mine=allScores[myId]; if(myName&&(!mine||mine.name!==myName)) pushMine((mine&&mine.best)||{},(mine&&mine.stars)||{}); }
+      if(first){ first=false; backfillLocal(); verifyMyName(); }
     }, e=>{ clearTimeout(tm); console.warn('ranking',e); rankErr=errText(e); rankState='error'; renderRank(); });
   }catch(e){ console.warn('ranking off',e); rankErr=errText(e); rankState='error'; renderRank(); }
 })();
@@ -979,7 +979,7 @@ function loadScores(){ /* live via onSnapshot */ }
 function pushMine(best,stars){
   if(!SB||!myId) return;
   allScores[myId]={best,stars,name:myName}; renderRank(); updateResRank();
-  writing=writing.then(()=>SB.collection('scores').doc(myId).set({name:(myName||'익명 출근러').slice(0,16),best,stars,updatedAt:firebase.firestore.FieldValue.serverTimestamp()}))
+  writing=writing.then(()=>SB.collection('scores').doc(myId).set({name:(nameOk?myName:'익명 출근러').slice(0,16),best,stars,updatedAt:firebase.firestore.FieldValue.serverTimestamp()}))
     .catch(e=>{ console.warn('save',e); rankNote='기록 저장 실패: '+errText(e); renderRank(); });
 }
 function backfillLocal(){
@@ -1007,12 +1007,40 @@ function showNick(then){
 }
 function showNickIfNeeded(){ if(!myName&&$('nick').hidden&&(state==='title')) showNick(); }
 function closeNick(){ $('nick').hidden=true; if(nickFrom) nickFrom.hidden=false; else if(state==='title') $('title').hidden=false; }
-function confirmNick(){
-  const v=$('nickIn').value.trim().slice(0,16);
-  if(!v){ $('nickErr').textContent='한 글자 이상 입력해 주세요'; $('nickErr').style.color='var(--stop)'; return; }
-  const changed=v!==myName; myName=v; try{ localStorage.setItem('yatap-name',v); }catch(e){}
-  if(changed&&SB&&myId){ const mine=allScores[myId]||{best:{},stars:{}}; pushMine(mine.best||{},mine.stars||{}); }
+const nameKey=v=>v.trim().toLowerCase();
+function nickBad(v){ if(!v) return '한 글자 이상 입력해 주세요'; if(/[\/]/.test(v)||v==='.'||v==='..'||/^__.*__$/.test(v)) return '쓸 수 없는 글자가 있어요 ( / 등)'; if(v==='익명 출근러') return '다른 닉네임을 정해 주세요'; return ''; }
+// claim names/<key> for me (and release my old one) in one transaction; rejects 'taken'
+async function claimName(v,old){
+  const key=nameKey(v), oldKey=old?nameKey(old):'';
+  await SB.runTransaction(async t=>{
+    const ref=SB.collection('names').doc(key); const d=await t.get(ref);
+    if(d.exists&&d.data().uid!==myId) throw {code:'taken'};
+    let oldRef=null, oldOk=false;
+    if(oldKey&&oldKey!==key){ oldRef=SB.collection('names').doc(oldKey); const od=await t.get(oldRef); oldOk=od.exists&&od.data().uid===myId; }
+    if(!d.exists) t.set(ref,{uid:myId,name:v});
+    if(oldOk) t.delete(oldRef);
+  });
+}
+let nickBusy=false;
+async function confirmNick(){
+  if(nickBusy) return;
+  const v=$('nickIn').value.trim().slice(0,16); const er=$('nickErr'); er.style.color='var(--stop)';
+  const bad=nickBad(v); if(bad){ er.textContent=bad; return; }
+  if(!(SB&&myId)){ er.style.color='var(--muted)'; er.textContent=rankState==='error'?'랭킹 서버에 연결되지 않아 중복 확인을 못 해요. '+(rankErr||''):'랭킹 서버 연결 중… 잠시 후 다시 눌러 주세요.'; return; }
+  nickBusy=true; er.style.color='var(--muted)'; er.textContent='중복 확인 중…';
+  try{ await claimName(v,myName); }
+  catch(e){ nickBusy=false; er.style.color='var(--stop)'; er.textContent=e&&e.code==='taken'?'이미 다른 사람이 쓰는 닉네임이에요':'저장하지 못했어요. '+errText(e); return; }
+  nickBusy=false; nameOk=true; myName=v; try{ localStorage.setItem('yatap-name',v); }catch(e){}
+  const mine=allScores[myId]||{best:{},stars:{}}; pushMine(mine.best||{},mine.stars||{});
   updateWho(); toast('반가워요, '+v+'님!','good'); closeNick(); const t=nickThen; nickThen=null; if(t) t();
+}
+// a name saved on this device before uniqueness existed: claim it, or ask for a new one if it's taken
+async function verifyMyName(){
+  if(!myName||!SB||!myId) return;
+  try{ await claimName(myName,''); nameOk=true; const mine=allScores[myId]; if(!mine||mine.name!==myName) pushMine((mine&&mine.best)||{},(mine&&mine.stars)||{}); }
+  catch(e){ if(e&&e.code==='taken'){ const old=myName; myName=''; try{ localStorage.removeItem('yatap-name'); }catch(_){} updateWho();
+      const ask=()=>{ showNick(); $('nickMsg').textContent='"'+old+'"은(는) 이미 다른 사람이 쓰고 있어요. 새 닉네임을 정해 주세요.'; };
+      if(state==='title') ask(); else { const iv=setInterval(()=>{ if(state==='title'||state==='result'){ clearInterval(iv); ask(); } },1000); } } }
 }
 function updateWho(){ const el=$('whoami'); if(el) el.innerHTML=myName?'<b></b>님으로 출근 중 · <button class="linkbtn" id="nickEdit">닉네임 변경</button>':''; if(myName){ el.querySelector('b').textContent=myName; $('nickEdit').onclick=()=>showNick(); } }
 function rankRows(key){
