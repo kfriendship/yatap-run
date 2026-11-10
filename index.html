@@ -7,7 +7,7 @@
 <meta property="og:title" content="야탑 출근런">
 <meta property="og:description" content="야탑역에서 마커스빌딩까지 9시 전에 도착하라!">
 <style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0;font:14px system-ui,sans-serif}img{max-width:100%}[hidden]{display:none!important}</style>
-<script src="config.js?v=1"></script>
+<script src="config.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
@@ -160,6 +160,7 @@ kbd{font-family:var(--f-led);background:#05080b;border:1px solid var(--line);bor
 .rklist .no{font-family:var(--f-display);font-size:18px;color:var(--muted);text-align:center}
 .rklist li:nth-child(1) .no{color:#ffd23f}.rklist li:nth-child(2) .no{color:#cfd6de}.rklist li:nth-child(3) .no{color:#d9925a}
 .rklist .av{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;color:#fff;font-size:13px;font-weight:700}
+.linkbtn{font:inherit;font-size:12px;background:none;border:0;color:var(--led);text-decoration:underline;cursor:pointer;padding:0}
 .rkname{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center}
 .rkname input{font:inherit;font-size:14px;background:var(--panel2);color:var(--paper);border:1px solid var(--line);border-radius:8px;padding:9px 10px;min-width:0}
 .rkname .btn{padding:8px 14px}
@@ -213,6 +214,7 @@ kbd{font-family:var(--f-led);background:#05080b;border:1px solid var(--line);bor
         <div class="modes"><button class="btn" id="helpTitle"><strong>게임 방법</strong><small>조작 · 콤보 쌓는 법 · 별 받는 법</small></button><button class="btn primary" id="openDiary"><strong>출근 다이어리 열기</strong><small>3월부터 12월까지, 4주 · 20일 출근</small></button></div>
         <div class="keys"><span><kbd>←→</kbd> 피하기</span><span><kbd>↓</kbd>/<kbd>Space</kbd> 멈춤</span><span>모바일: 아래 ◀ 멈춤 ▶ 버튼</span></div>
         <div class="best" id="bestTitle"></div>
+        <div class="best" id="whoami"></div>
       </div>
     </section>
 
@@ -252,9 +254,8 @@ kbd{font-family:var(--f-led);background:#05080b;border:1px solid var(--line);bor
       <div class="card">
         <div class="board"><span>사원증 발급</span><span>출근 랭킹용</span></div>
         <h2>닉네임을 정해 주세요</h2>
-        <p id="nickMsg">출근 랭킹에 이 이름으로 기록이 올라가요. 나중에 랭킹 화면에서 바꿀 수 있어요.</p>
+        <p id="nickMsg">출근 랭킹에 이 이름으로 기록이 올라가요.</p>
         <div class="rkname"><input id="nickIn" maxlength="16" placeholder="예: 클로봇 출근왕" autocomplete="nickname"><button class="btn primary" id="nickOk"><strong>확인</strong></button><small id="nickErr"></small></div>
-        <button class="btn" id="nickLater"><strong>나중에 할게요</strong><small>랭킹에는 '익명 출근러'로 보여요</small></button>
       </div>
     </section>
 
@@ -295,7 +296,6 @@ kbd{font-family:var(--f-led);background:#05080b;border:1px solid var(--line);bor
     <section class="ov" id="rank" hidden>
       <div class="card">
         <div class="board"><span>출근 랭킹</span><span id="rkSub">빠른 도착 순</span></div>
-        <div class="rkname"><input id="rkName" maxlength="16" placeholder="랭킹에 표시할 닉네임" autocomplete="nickname"><button class="btn" id="rkNameBtn"><strong>저장</strong></button><small id="rkNameSaved"></small></div>
         <div class="rkpick"><select id="rkW" aria-label="주차"></select><select id="rkD" aria-label="요일"></select></div>
         <ol class="rklist" id="rkList"></ol>
         <p class="rknote" id="rkNote"></p>
@@ -914,7 +914,6 @@ function startStage(w,d){
 let selW=0;
 function totalStars(){ return Object.values(prog.stars).reduce((a,b)=>a+b,0); }
 function openSelect(w){
-  setTimeout(showNickIfNeeded,0);
   if(w!==undefined) selW=w; state='title';
   for(const id of ['title','intro','result','lobby']) $(id).hidden=true;
   $('starTotal').textContent='★ '+totalStars()+'/'+WEEKS.length*15;
@@ -936,7 +935,7 @@ function showIntro(w,d){
   $('inGoals').innerHTML='<div><b>★</b> 9시 전 도착 (다음 날 해금)</div><div><b>★</b> 사고·적발 0회</div><div><b>★</b> 최고 콤보 '+D.goal+' 이상</div>'+(best>0?'<div>최고 기록 '+fmt(best)+'</div>':'');
   $('select').hidden=true; $('result').hidden=true; $('intro').hidden=false; $('go').focus();
 }
-$('openDiary').onclick=()=>{ initAudio(); openSelect(); };
+$('openDiary').onclick=()=>{ initAudio(); if(!myName) showNick(()=>openSelect()); else openSelect(); };
 $('selBack').onclick=()=>{ $('select').hidden=true; $('title').hidden=false; showBestTitle(); };
 $('go').onclick=()=>startStage(curW,curD);
 $('inBack').onclick=()=>openSelect(curW);
@@ -947,6 +946,15 @@ $('toTitle').onclick=()=>{ $('result').hidden=true; openSelect(curW); };
 // ================= SHARED RANKING (Firebase Firestore) =================
 // collection scores/<anonymous uid> = { name, best:{'w-d':arrivalSec}, stars:{'w-d':n}, updatedAt }
 const FB_CFG=window.YATAP_CONFIG&&window.YATAP_CONFIG.firebase||null;
+let rankErr='';
+function errText(e){ const c=(e&&e.code)||''; const m=(e&&e.message)||'';
+  if(/operation-not-allowed|admin-restricted/.test(c)) return 'Firebase 익명 로그인이 꺼져 있어요. (Authentication → 로그인 방법 → 익명 사용 설정)';
+  if(/unauthorized-domain/.test(c)) return '이 주소가 Firebase 승인된 도메인에 없어요.';
+  if(/permission-denied/.test(c)) return 'Firestore 규칙이 아직 게시되지 않았어요. (Firestore → 규칙에 firestore.rules 붙여넣고 게시)';
+  if(/not-found|failed-precondition/.test(c)||/database.*does not exist/i.test(m)) return 'Firestore 데이터베이스가 아직 없어요. (Firestore Database → 데이터베이스 만들기)';
+  if(/api-key|invalid-api-key/.test(c)) return 'config.js의 Firebase 설정 값이 잘못됐어요.';
+  if(/network|unavailable/.test(c)) return '네트워크 문제로 랭킹 서버에 연결하지 못했어요.';
+  return '랭킹 서버 오류 ('+(c||'unknown')+')'; }
 let SB=null, myId=null, allScores={}, rankState='loading', rankNote='', writing=Promise.resolve(), rankFrom=null;
 let myName=''; try{ myName=localStorage.getItem('yatap-name')||''; }catch(e){}
 (async()=>{
@@ -963,16 +971,16 @@ let myName=''; try{ myName=localStorage.getItem('yatap-name')||''; }catch(e){}
       clearTimeout(tm);
       const m={}; snap.forEach(d=>{ const r=d.data()||{}; m[d.id]={best:r.best||{},stars:r.stars||{},name:r.name||''}; }); allScores=m;
       rankState='ready'; renderRank(); updateResRank();
-      if(first){ first=false; backfillLocal(); showNickIfNeeded(); }
-    }, e=>{ clearTimeout(tm); console.warn('ranking',e); rankState='error'; renderRank(); });
-  }catch(e){ console.warn('ranking off',e); rankState='error'; renderRank(); }
+      if(first){ first=false; backfillLocal(); const mine=allScores[myId]; if(myName&&(!mine||mine.name!==myName)) pushMine((mine&&mine.best)||{},(mine&&mine.stars)||{}); }
+    }, e=>{ clearTimeout(tm); console.warn('ranking',e); rankErr=errText(e); rankState='error'; renderRank(); });
+  }catch(e){ console.warn('ranking off',e); rankErr=errText(e); rankState='error'; renderRank(); }
 })();
 function loadScores(){ /* live via onSnapshot */ }
 function pushMine(best,stars){
   if(!SB||!myId) return;
   allScores[myId]={best,stars,name:myName}; renderRank(); updateResRank();
   writing=writing.then(()=>SB.collection('scores').doc(myId).set({name:(myName||'익명 출근러').slice(0,16),best,stars,updatedAt:firebase.firestore.FieldValue.serverTimestamp()}))
-    .catch(e=>{ console.warn('save',e); rankNote='기록 저장에 실패했어요. 다음 판에서 다시 저장돼요.'; renderRank(); });
+    .catch(e=>{ console.warn('save',e); rankNote='기록 저장 실패: '+errText(e); renderRank(); });
 }
 function backfillLocal(){
   if(!SB||!myId) return; const mine=allScores[myId]||{}; const best=Object.assign({},mine.best||{}), stars=Object.assign({},mine.stars||{}); let changed=false;
@@ -988,30 +996,25 @@ function submitScore(k,arr,st){
   if((stars[k]||0)<st){ stars[k]=st; changed=true; }
   if(changed) pushMine(best,stars);
 }
-let nickFrom=null, nickAsked=false;
-function showNickIfNeeded(){
-  if(nickAsked||myName||!SB||!myId) return;
-  const srv=allScores[myId]&&allScores[myId].name;
-  if(srv&&srv!=='익명 출근러'){ myName=srv; try{ localStorage.setItem('yatap-name',srv); }catch(e){} return; }
-  if(state==='play'||state==='count'||state==='lobby'||state==='pause') return; // never interrupt a run
-  nickAsked=true;
-  const played=Object.keys(prog.stars||{}).length>0||(allScores[myId]&&Object.keys(allScores[myId].best||{}).length>0);
-  $('nickMsg').textContent=played?'이미 출근 기록이 있어요! 랭킹에 보일 이름을 정해 주세요. 나중에 랭킹 화면에서 바꿀 수 있어요.':'출근 랭킹에 이 이름으로 기록이 올라가요. 나중에 랭킹 화면에서 바꿀 수 있어요.';
+let nickFrom=null, nickThen=null;
+function showNick(then){
+  nickThen=then||null;
+  const played=Object.keys(prog.stars||{}).length>0;
+  $('nickMsg').textContent=myName?'랭킹에 보일 이름을 바꿀 수 있어요.':played?'이미 출근 기록이 있어요! 랭킹에 보일 이름을 정하고 시작해요.':'출근 랭킹에 이 이름으로 기록이 올라가요.';
+  $('nickIn').value=myName||'';
   nickFrom=[...document.querySelectorAll('.ov')].find(o=>!o.hidden&&o.id!=='nick')||null; if(nickFrom) nickFrom.hidden=true;
   $('nickErr').textContent=''; $('nick').hidden=false; setTimeout(()=>$('nickIn').focus(),50);
 }
+function showNickIfNeeded(){ if(!myName&&$('nick').hidden&&(state==='title')) showNick(); }
 function closeNick(){ $('nick').hidden=true; if(nickFrom) nickFrom.hidden=false; else if(state==='title') $('title').hidden=false; }
 function confirmNick(){
   const v=$('nickIn').value.trim().slice(0,16);
   if(!v){ $('nickErr').textContent='한 글자 이상 입력해 주세요'; $('nickErr').style.color='var(--stop)'; return; }
-  myName=v; try{ localStorage.setItem('yatap-name',v); }catch(e){}
-  const mine=allScores[myId]||{best:{},stars:{}}; pushMine(mine.best||{},mine.stars||{}); toast('반가워요, '+v+'님!','good'); closeNick();
+  const changed=v!==myName; myName=v; try{ localStorage.setItem('yatap-name',v); }catch(e){}
+  if(changed&&SB&&myId){ const mine=allScores[myId]||{best:{},stars:{}}; pushMine(mine.best||{},mine.stars||{}); }
+  updateWho(); toast('반가워요, '+v+'님!','good'); closeNick(); const t=nickThen; nickThen=null; if(t) t();
 }
-
-function saveName(){
-  const v=$('rkName').value.trim().slice(0,16); myName=v; try{ localStorage.setItem('yatap-name',v); }catch(e){}
-  const mine=allScores[myId]; if(SB&&myId&&mine) pushMine(mine.best||{},mine.stars||{}); $('rkNameSaved').textContent=v?'저장했어요':''; renderRank();
-}
+function updateWho(){ const el=$('whoami'); if(el) el.innerHTML=myName?'<b></b>님으로 출근 중 · <button class="linkbtn" id="nickEdit">닉네임 변경</button>':''; if(myName){ el.querySelector('b').textContent=myName; $('nickEdit').onclick=()=>showNick(); } }
 function rankRows(key){
   const rows=[];
   for(const [id,d] of Object.entries(allScores)){
@@ -1031,7 +1034,7 @@ function fillRankPick(){
   d.innerHTML=WEEKS[0].days.map((D,i)=>'<option value="'+i+'">'+D.d+'요일</option>').join('');
 }
 function openRank(w,d){
-  fillRankPick(); $('rkName').value=myName; $('rkNameSaved').textContent=''; loadScores(); $('rkW').value=w===undefined?'all':String(w); $('rkD').value=String(d||0);
+  fillRankPick(); loadScores(); $('rkW').value=w===undefined?'all':String(w); $('rkD').value=String(d||0);
   rankFrom=[...document.querySelectorAll('.ov')].find(o=>!o.hidden&&o.id!=='rank')||null; if(rankFrom) rankFrom.hidden=true;
   $('rank').hidden=false; renderRank();
 }
@@ -1043,7 +1046,7 @@ async function renderRank(){
   $('rkSub').textContent=all?'모은 별 많은 순':WEEKS[+wv].days[+$('rkD').value].d+'요일 · '+WEEKS[+wv].days[+$('rkD').value].title;
   const list=$('rkList'), note=$('rkNote');
   if(rankState==='off'){ list.innerHTML=''; note.textContent='랭킹 서버가 아직 연결되지 않았어요. 내 기록은 이 기기에만 저장돼요.'; return; }
-  if(rankState==='error'){ list.innerHTML=''; note.textContent='랭킹을 불러오지 못했어요. 잠시 후 다시 열어 주세요.'; return; }
+  if(rankState==='error'){ list.innerHTML=''; note.textContent='랭킹을 불러오지 못했어요. '+(rankErr||'잠시 후 다시 열어 주세요.'); return; }
   const rows=rankRows(key), top=rows.slice(0,10), mineIdx=rows.findIndex(r=>r.id===myId);
   if(mineIdx>=10) top.push(rows[mineIdx]);
   const seq=++rankSeq; const ps={};
@@ -1062,8 +1065,7 @@ async function renderRank(){
   if(rankNote) msgs.push(rankNote);
   note.textContent=msgs.join(' ');
 }
-$('nickOk').onclick=confirmNick; $('nickLater').onclick=closeNick; $('nickIn').addEventListener('keydown',e=>{ e.stopPropagation(); if(e.key==='Enter') confirmNick(); });
-$('rkNameBtn').onclick=saveName; $('rkName').addEventListener('keydown',e=>{ e.stopPropagation(); if(e.key==='Enter') saveName(); });
+$('nickOk').onclick=confirmNick; $('nickIn').addEventListener('keydown',e=>{ e.stopPropagation(); if(e.key==='Enter') confirmNick(); });
 $('rkW').onchange=renderRank; $('rkD').onchange=renderRank;
 $('rkClose').onclick=()=>{ $('rank').hidden=true; if(rankFrom) rankFrom.hidden=false; else $('title').hidden=false; };
 $('selRank').onclick=()=>openRank(selW,0);
@@ -1415,7 +1417,7 @@ function frame(ts){
   render(); hud();
   requestAnimationFrame(frame);
 }
-resize(); resetWorld(); showBestTitle(); hud();
+resize(); resetWorld(); showBestTitle(); hud(); updateWho(); if(!myName) setTimeout(()=>showNick(),300);
 requestAnimationFrame(frame);
 })();
 </script>
